@@ -1,41 +1,278 @@
-# History AIS - AIS Data Processing and Visualization Pipeline
+# AIS-History: AIS temporal parser and geospatial vessel visualization.
 
-This repository contains a set of Python tools designed to process, filter, and visualize marine geolocation data (**AIS - Automatic Identification System**) stored in JSON format. 
+`AIS-History` is a Python-based pipeline for processing raw AIS (Automatic Identification System) maritime data stored as JSON message streams. The project converts large-scale AIS logs into structured Apache Parquet datasets, applies temporal and geospatial filtering, and generates interactive time-based vessel movement visualizations.
 
-The project is structured as a step-by-step pipeline, allowing you to clean large raw data log files, extract smaller subsets for fast testing, and ultimately generate an interactive map featuring a dynamic timeline animation of vessel routes.
+The processing architecture is divided into two main stages:
 
-The project consists of three main scripts that should be executed in the following sequential order:
+* `parse_ais()`: Parses raw JSON AIS messages, repairs corrupted timestamps, decodes NMEA payloads, and stores canonical structured records in columnar Parquet format.
+* `mapit()`: Loads AIS temporal datasets and generates interactive animated vessel trajectory maps using geographic coordinates and timestamp playback.
 
-### 1. Data Cleanup (`ais_clean.py`)
-Raw AIS log files often contain terminal noise, system errors, or empty lines. This script performs a fast text-based string pre-filter and runs a robustness check to validate that each line is a properly formatted JSON object, preserving only valid AIS class entries.
+The pipeline is designed for efficient handling of multi-million message AIS datasets while supporting post-processing spatial filtering and export to multiple formats.
 
-*   **Output:** Generates a file with the suffix `_cleaned.json`.
-*   **Usage:**
+---
+
+## Requirements
+
+Main dependencies:
+
+* Python 3.13+
+* `orjson`
+* `polars`
+* `pyarrow`
+* `pyais`
+* `folium`
+* `tqdm`
+
+Install dependencies:
+
 ```bash
-    python3 ais_clean.py <path_to_raw_input.json>
+pip install orjson polars pyarrow pyais folium tqdm
 ```
 
-### 2. Record Slicing (`ais_slice.py`)
-Processing massive geospatial datasets can be highly demanding on CPU and memory resources. This script allows you to extract exactly the first $N$ records from a cleaned JSON file, making it ideal for creating lightweight samples for rapid map layout testing.
+---
 
-*   **Output:** Generates a file with the suffix `_sliced.json`.
-*   **Usage:**
-```bash
-    # Example to extract only the first 5000 lines
-    python3 ais_slice.py <path_to_cleaned_input.json> 5000
+## Dataset Structure
+
+All parsed AIS data is stored using a canonical schema in Apache Parquet format.
+
+Main fields:
+
+```text
+mmsi
+timestamp
+lat
+lon
+speed
+course
+heading
+country
+country_code
+status_text
+signalpower
+accuracy
+nmea
+type
+channel
+device
+...
 ```
 
-### 3. Temporal Map Visualization (`ais_main.py`)
-The primary script of this project. It parses the processed data (either cleaned or sliced), converts raw receiver timestamps into proper standard ISO formats, and utilizes the **Folium** library to render an interactive map in your web browser.
+The schema is defined through:
 
-**Key Features:**
-*   **Persistent Coloring:** Every vessel (uniquely identified by its `MMSI`) is assigned a persistent, dedicated color on the map.
-*   **Time-Slider Animation:** Integrates the `TimestampedGeoJson` plugin, adding a time control interface (Play/Pause/Slider) to animate vessel trajectories over time.
-*   **WEC C4 Reference Bounds:** Automatically plots a red info marker and its corresponding bounding box ($11.19\text{ km} \times 11.19\text{ km}$ square area) centered around the WEC C4 reference coordinate ($41.458747, -8.842215$).
-*   **Auto-Launch:** Automatically compiles the geospatial entries and opens the resulting `.html` file inside your default web browser.
-
-*   **Output:** Generates an interactive map named `_timeline_map.html`.
-*   **Usage:**
-```bash
-    python3 ais_main.py <path_to_cleaned_or_sliced.json>
+```python
+CANONICAL_SCHEMA
+ARROW_SCHEMA
 ```
+
+---
+
+## Usage
+
+### Parsing Raw AIS Data
+
+`parse_ais()` processes line-separated AIS JSON records and stores valid decoded messages in Parquet format.
+
+Function prototype:
+
+```python
+parse_ais(infile, outfile, bsize, start, end)
+```
+
+Parameters:
+
+* `infile` → Raw AIS JSON input dataset
+* `outfile` → Output parquet file
+* `bsize` → Batch size used during parquet writing
+* `start` → Initial UTC timestamp filter
+* `end` → Final UTC timestamp filter
+
+Example:
+
+```python
+from datetime import datetime, timezone
+
+parse_ais(
+    infile="dataset/feup.json",
+    outfile="dataset/ais_d22-23.parquet",
+    bsize=500000,
+    start=datetime(2026, 5, 22, 0, 0, 0, tzinfo=timezone.utc),
+    end=datetime(2026, 5, 24, 0, 0, 0, tzinfo=timezone.utc)
+)
+```
+
+Returned values:
+
+```python
+(saved_records, skipped_records, total_records)
+```
+
+Example output:
+
+```text
+(428402, 15280259, 15708661)
+```
+
+Internal processing stages:
+
+* JSON parsing using `orjson`
+* Timestamp extraction from:
+
+  * `timestamp`
+  * `rxuxtime`
+  * `rxtime`
+* Automatic timestamp repair
+* AIS NMEA decoding through `pyais`
+* Temporal filtering
+* Batch writing to parquet
+
+---
+
+### Interactive Vessel Mapping
+
+`mapit()` generates an interactive HTML map containing timestamp-based animated vessel trajectories.
+
+Function prototype:
+
+```python
+mapit(path)
+```
+
+Parameters:
+
+* `path` → Input parquet AIS dataset
+
+Example:
+
+```python
+mapit("dataset/ais_d22-23.parquet")
+```
+
+Generated output:
+
+```text
+output/ais_d22-23_timeline_map.html
+```
+
+Map features:
+
+* Timestamp playback slider
+* Vessel trajectory animation
+* MMSI identification
+* Speed/course/heading metadata
+* Country information
+* Reference geospatial bounding box
+
+Internally implemented using:
+
+* `folium`
+* `TimestampedGeoJson`
+
+---
+
+## Spatial Filtering
+
+Generated parquet datasets can be filtered geographically using latitude and longitude constraints.
+
+Reference coordinate:
+
+```python
+coord_center = {
+    "lat": 41.458747,
+    "lon": -8.842215,
+    "half_side_km": 5.59704
+}
+```
+
+Bounding box conversion:
+
+```python
+dlat = half_side_km / 111.0
+dlon = half_side_km / (111.0 * cos(latitude))
+```
+
+Filter example:
+
+```python
+filtered = (
+    pl.scan_parquet(path)
+    .filter(
+        (pl.col("lat") > coord_center["lat"] - dlat) &
+        (pl.col("lat") < coord_center["lat"] + dlat) &
+        (pl.col("lon") > coord_center["lon"] - dlon) &
+        (pl.col("lon") < coord_center["lon"] + dlon)
+    )
+    .collect()
+)
+```
+
+---
+
+## Exporting Filtered Data
+
+Filtered datasets can be exported in parquet or CSV format.
+
+Write parquet:
+
+```python
+filtered.write_parquet(
+    "dataset/ais_d22-23_filtered.parquet"
+)
+```
+
+Write CSV:
+
+```python
+filtered.drop(["nmea"]).write_csv(
+    "dataset/ais_d22-23_filtered.csv"
+)
+```
+
+---
+
+## Full Processing Pipeline
+
+```text
+Raw AIS JSON Dataset
+        ↓
+parse_ais()
+        ↓
+Temporal AIS Parquet Dataset
+        ↓
+Geospatial Filtering
+        ↓
+Filtered Parquet / CSV
+        ↓
+mapit()
+        ↓
+Interactive HTML Timeline Map
+```
+
+---
+
+## Output Structure
+
+```text
+dataset/
+ ├── ais_d22-23.parquet
+ ├── ais_d31.parquet
+ ├── ais_d9-12.parquet
+ ├── ais_d22-23_filtered.parquet
+ ├── ais_d22-23_filtered.csv
+
+output/
+ ├── ais_d22-23_timeline_map.html
+ ├── ais_d22-23_filtered_timeline_map.html
+```
+
+---
+
+## Author
+
+Fábio D. Pacheco (fabio.d.pacheco@inesctec.pt)
+Gonçalo Soares (goncalo.soares@inesctec.pt)
+
+---
+
+## License
+
+MIT License
