@@ -1,6 +1,6 @@
 # AIS-History: AIS temporal parser and geospatial vessel visualization.
 
-`AIS-History` is a Python-based pipeline for processing raw AIS (Automatic Identification System) maritime data stored as JSON message streams. The project converts large-scale AIS logs into structured Apache Parquet datasets, applies temporal and geospatial filtering, and generates interactive time-based vessel movement visualizations.
+`AIS-History` is a Python-based pipeline for processing raw AIS (Automatic Identification System) maritime data stored as JSON message streams, output obtained by logging the JSON console output of AIS-Catcher project by Jasper. The project converts large-scale AIS logs into structured Apache Parquet datasets, applies temporal and geospatial filtering, and generates interactive time-based vessel movement visualizations.
 
 The processing architecture is divided into two main stages:
 
@@ -11,9 +11,118 @@ The pipeline is designed for efficient handling of multi-million message AIS dat
 
 ---
 
+## Dataset Structure
+
+### Metadata about Reception / Decoder
+
+| Field      | Meaning                                                                   | Example             |
+| ---------- | ------------------------------------------------------------------------- | ------------------- |
+| `class`    | AIS transmitter class (usually vessel transponder type)                   | A, B                |
+| `device`   | Receiver device identifier that captured the AIS signal                   | SDR-01              |
+| `version`  | AIS-Catcher software version                                              | 3.1.0               |
+| `driver`   | SDR driver used by receiver                                               | RTLSDR              |
+| `hardware` | Hardware used for reception                                               | RTL-SDR v3          |
+| `rxtime`   | Human-readable timestamp when message was received                        | 2026-06-22 14:32:10 |
+| `rxuxtime` | Unix timestamp of reception                                               | 1782138730          |
+| `channel`  | VHF AIS channel used                                                      | A / B               |
+| `scaled`   | Indicates whether numeric fields were already scaled to engineering units | true/false          |
+| `nmea`     | Raw NMEA AIS sentence                                                     | !AIVDM,...          |
+
+### Radio Signal Quality / Receiver Parameters
+
+| Field         | Meaning                                                          | Example |
+| ------------- | ---------------------------------------------------------------- | ------- |
+| `signalpower` | Received signal strength / power level                           | -42 dBm |
+| `ppm`         | Frequency correction error (Parts Per Million) of SDR oscillator | 2.3     |
+
+### AIS Message Header Fields
+
+| Field      | Meaning                                             | Example         |
+| ---------- | --------------------------------------------------- | --------------- |
+| `type`     | AIS message type number                             | 1               |
+| `msg_type` | Human-readable message category                     | Position Report |
+| `repeat`   | Number of retransmissions                           | 0–3             |
+| `mmsi`     | Maritime Mobile Service Identity (unique vessel ID) | 235123456       |
+
+### Vessel Identity / Registration
+
+| Field          | Meaning                           | Example  |
+| -------------- | --------------------------------- | -------- |
+| `country`      | Country inferred from MMSI prefix | Portugal |
+| `country_code` | Maritime country code (MID)       | 255      |
+
+Example countries:
+
+* 235 = United Kingdom
+* 255 = Portugal
+* 366 = United States
+
+### Navigation Status
+
+| Field         | Meaning                                       | Example   |
+| ------------- | --------------------------------------------- | --------- |
+| `status`      | Numeric navigation status code                | 0         |
+| `status_text` | Human-readable vessel status                  | Under way |
+| `maneuver`    | Special maneuver indicator                    | Turning   |
+| `raim`        | Receiver Autonomous Integrity Monitoring flag | 0/1       |
+
+Common `status` values:
+
+| Code | Meaning                |
+| ---- | ---------------------- |
+| 0    | Under way using engine |
+| 1    | At anchor              |
+| 5    | Moored                 |
+| 6    | Aground                |
+
+### Vessel Motion / Navigation Data
+
+| Field      | Meaning                    | Unit            |
+| ---------- | -------------------------- | --------------- |
+| `speed`    | Speed Over Ground (SOG)    | knots           |
+| `course`   | Course Over Ground (COG)   | degrees         |
+| `heading`  | True heading of vessel     | degrees         |
+| `lon`      | Longitude                  | decimal degrees |
+| `lat`      | Latitude                   | decimal degrees |
+| `accuracy` | GPS position accuracy flag | high/low        |
+
+### Rate of Turn Information
+
+| Field           | Meaning                    | Example   |
+| --------------- | -------------------------- | --------- |
+| `turn_unscaled` | Raw AIS encoded turn value | 45        |
+| `turn`          | Converted rate of turn     | 8.3 °/min |
+
+AIS stores turn in compressed form, so:
+```text
+turn = pyais.decoded(turn_unscaled)
+```
+
+### Time Information Embedded in AIS Message
+
+| Field        | Meaning                            | Example    |
+| ------------ | ---------------------------------- | ---------- |
+| `second`     | UTC second when GPS fix was taken  | 37         |
+| `utc_hour`   | UTC hour                           | 14         |
+| `utc_minute` | UTC minute                         | 52         |
+| `timestamp`  | Timestamp field inside AIS payload | 1718712352 |
+
+### TDMA Radio Communication Fields
+
+AIS uses Self-Organizing Time Division Multiple Access (SOTDMA):
+
+| Field          | Meaning                           | Example         |
+| -------------- | --------------------------------- | --------------- |
+| `radio`        | Raw radio state information       | encoded integer |
+| `sync_state`   | TDMA synchronization method       | UTC Direct      |
+| `slot_timeout` | Frames until new slot reservation | 3               |
+| `slot_offset`  | Reserved transmission slot offset | 124             |
+
+---
+
 ## Requirements
 
-Main dependencies:
+Library Requirements:
 
 * Python 3.13+
 * `orjson`
@@ -23,62 +132,17 @@ Main dependencies:
 * `folium`
 * `tqdm`
 
-Install dependencies:
-
 ```bash
 pip install orjson polars pyarrow pyais folium tqdm
 ```
-
----
-
-## Dataset Structure
-
-All parsed AIS data is stored using a canonical schema in Apache Parquet format.
-
-Main fields:
-
-```text
-mmsi
-timestamp
-lat
-lon
-speed
-course
-heading
-country
-country_code
-status_text
-signalpower
-accuracy
-nmea
-type
-channel
-device
-...
-```
-
-The schema is defined through:
-
-```python
-CANONICAL_SCHEMA
-ARROW_SCHEMA
-```
-
----
 
 ## Usage
 
 ### Parsing Raw AIS Data
 
-`parse_ais()` processes line-separated AIS JSON records and stores valid decoded messages in Parquet format.
-
-Function prototype:
-
 ```python
 parse_ais(infile, outfile, bsize, start, end)
 ```
-
-Parameters:
 
 * `infile` → Raw AIS JSON input dataset
 * `outfile` → Output parquet file
@@ -90,7 +154,6 @@ Example:
 
 ```python
 from datetime import datetime, timezone
-
 parse_ais(
     infile="dataset/feup.json",
     outfile="dataset/ais_d22-23.parquet",
@@ -106,38 +169,11 @@ Returned values:
 (saved_records, skipped_records, total_records)
 ```
 
-Example output:
-
-```text
-(428402, 15280259, 15708661)
-```
-
-Internal processing stages:
-
-* JSON parsing using `orjson`
-* Timestamp extraction from:
-
-  * `timestamp`
-  * `rxuxtime`
-  * `rxtime`
-* Automatic timestamp repair
-* AIS NMEA decoding through `pyais`
-* Temporal filtering
-* Batch writing to parquet
-
----
-
 ### Interactive Vessel Mapping
-
-`mapit()` generates an interactive HTML map containing timestamp-based animated vessel trajectories.
-
-Function prototype:
 
 ```python
 mapit(path)
 ```
-
-Parameters:
 
 * `path` → Input parquet AIS dataset
 
@@ -153,23 +189,7 @@ Generated output:
 output/ais_d22-23_timeline_map.html
 ```
 
-Map features:
-
-* Timestamp playback slider
-* Vessel trajectory animation
-* MMSI identification
-* Speed/course/heading metadata
-* Country information
-* Reference geospatial bounding box
-
-Internally implemented using:
-
-* `folium`
-* `TimestampedGeoJson`
-
----
-
-## Spatial Filtering
+### Spatial Filtering
 
 Generated parquet datasets can be filtered geographically using latitude and longitude constraints.
 
@@ -205,9 +225,7 @@ filtered = (
 )
 ```
 
----
-
-## Exporting Filtered Data
+### Exporting Filtered Data
 
 Filtered datasets can be exported in parquet or CSV format.
 
@@ -226,28 +244,6 @@ filtered.drop(["nmea"]).write_csv(
     "dataset/ais_d22-23_filtered.csv"
 )
 ```
-
----
-
-## Full Processing Pipeline
-
-```text
-Raw AIS JSON Dataset
-        ↓
-parse_ais()
-        ↓
-Temporal AIS Parquet Dataset
-        ↓
-Geospatial Filtering
-        ↓
-Filtered Parquet / CSV
-        ↓
-mapit()
-        ↓
-Interactive HTML Timeline Map
-```
-
----
 
 ## Output Structure
 
@@ -269,10 +265,11 @@ output/
 ## Author
 
 Fábio D. Pacheco (fabio.d.pacheco@inesctec.pt)
+
 Gonçalo Soares (goncalo.soares@inesctec.pt)
 
 ---
 
 ## License
 
-MIT License
+[MIT License](https://mit-license.org/)
