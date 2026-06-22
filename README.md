@@ -1,6 +1,6 @@
-# AIS-History: AIS temporal parser and geospatial vessel visualization.
+# AIS-History
 
-`AIS-History` is a Python-based pipeline for processing raw AIS (Automatic Identification System) maritime data stored as JSON message streams, output obtained by logging the JSON console output of AIS-Catcher project by Jasper. The project converts large-scale AIS logs into structured Apache Parquet datasets, applies temporal and geospatial filtering, and generates interactive time-based vessel movement visualizations.
+AIS-History is a Python-based pipeline for processing raw AIS (Automatic Identification System) maritime data stored as JSON message streams, output obtained by logging the JSON console output of AIS-Catcher project by Jasper. The project converts large-scale AIS logs into structured Apache Parquet datasets, applies temporal and geospatial filtering, and generates interactive time-based vessel movement visualizations.
 
 The processing architecture is divided into two main stages:
 
