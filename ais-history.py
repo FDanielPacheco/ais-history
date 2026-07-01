@@ -177,15 +177,9 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
 def get_shipspotting_image(mmsi):      
         s = requests.Session()
         s.headers.update({"User-Agent": "Mozilla/5.0"})
-
-        res1 = s.get(f"https://maritime-database.com/search?q={mmsi}")
-        paths = re.findall(r'href="([^"]*/vessel/[^"]*)"', res1.text)
-        if not paths: 
-                return None
-
-        res2 = s.get(f"https://maritime-database.com{paths[0]}" if not paths[0].startswith("http") else paths[0])
-        img = re.search(r'src="(https://www\.myshiptracking\.com/requests/getimage-[^"]+)"', res2.text)
-        return img.group(1) if img else f"https://www.myshiptracking.com/requests/getimage-normal/{mmsi}.jpg"
+        res = s.get(f"https://www.vesselfinder.com/vessels/details/{mmsi}")
+        img = re.search(r'<img[^>]*class="main-photo"[^>]*src="([^"]+)"|<img[^>]*src="([^"]+)"[^>]*class="main-photo"', res.text)
+        return (img.group(1) or img.group(2)) if img else None
     
 def winlayout():
         st.set_page_config(page_title="AIS-History", layout="wide")
