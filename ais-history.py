@@ -1,6 +1,6 @@
-import os, math, psycopg2, folium, requests, re, uuid
+import os, math, psycopg2, folium, requests, re, uuid, csv, io
 import streamlit as st
-import pandas as pd
+import psycopg2.extras
 
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta, time as dt_time
@@ -10,7 +10,6 @@ from pathlib import Path
 from vessel_validator import validate_mmsi
 
 colorscheme = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3","#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"]
-mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"                        
 region_dict = {"lat": 41.458747, "lon": -8.842215, "width": 5.59704, "height": 5.59704}
 dlat = region_dict["width"] / 111.0
 dlon = region_dict["height"] / (111.0 * math.cos(math.radians(region_dict["lat"])))
@@ -20,19 +19,18 @@ def to_utc(dt):
         return dt.replace(tzinfo=local_tz).astimezone(timezone.utc)
 
 def mapit(df, bs, live=False):
-        df = df.dropna(subset=["lat", "lon"])               
         m = folium.Map(location=[bs["lat"], bs["lon"]], zoom_start=6, tiles="CartoDB positron")
         folium.Marker(
                 [bs["lat"], bs["lon"]],
                 popup="Base Station FEUP",
                 icon=folium.Icon(color="gray", icon="info-sign")
         ).add_to(m)
-        if df.empty:
+        if not df:  
                 return m
-
+    
         color_map = {}
         features = []
-        for idx, rec in df.iterrows():
+        for rec in df:
                 mmsi, lat, lon, ts = rec["mmsi"], rec["lat"], rec["lon"], rec["received_at"]
                 if mmsi not in color_map:
                         color_map[mmsi] = colorscheme[len(color_map) % len(colorscheme)]
@@ -131,6 +129,7 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
         )
         bs = requests.get(f'http://{os.getenv("DB_HOST")}:8888').json()
 
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         if False == live:
                 validateTime(time_dict)
                 if region is None:
@@ -139,45 +138,45 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
                                 "FROM ais_vessel_pos pos "
                                 "LEFT JOIN ais_vessel v ON pos.mmsi = v.mmsi "
                                 "WHERE pos.received_at >= %s AND pos.received_at < %s "
+                                "  AND pos.lat IS NOT NULL AND pos.lon IS NOT NULL "
                                 "  AND (%s IS NULL OR pos.mmsi = %s);"
                         )
-                        df = pd.read_sql_query(
-                                query, conn, 
-                                params=(
-                                        time_dict["ini"], time_dict["fin"], 
-                                        mmsi, mmsi
-                                )
-                        )
+                        params = (time_dict["ini"], time_dict["fin"], mmsi, mmsi)
                 else:
                         query = (
                                 "SELECT pos.*, v.shipname, v.callsign, v.shiptype, v.destination " 
                                 "FROM ais_vessel_pos pos "
                                 "LEFT JOIN ais_vessel v ON pos.mmsi = v.mmsi "
                                 "WHERE pos.received_at >= %s AND pos.received_at < %s "
+                                "  AND pos.lat IS NOT NULL AND pos.lon IS NOT NULL "
                                 "  AND pos.lat BETWEEN %s AND %s AND pos.lon BETWEEN %s AND %s "
                                 "  AND (%s IS NULL OR pos.mmsi = %s);"
                         )
-                        df = pd.read_sql_query(
-                                query, conn, 
-                                params=(
-                                        time_dict["ini"], time_dict["fin"], 
-                                        region_dict["lat"] - dlat, region_dict["lat"] + dlat, 
-                                        region_dict["lon"] - dlon, region_dict["lon"] + dlon,
-                                        mmsi, mmsi
-                                )
+                        params = (
+                                time_dict["ini"], time_dict["fin"], 
+                                region_dict["lat"] - dlat, region_dict["lat"] + dlat, 
+                                region_dict["lon"] - dlon, region_dict["lon"] + dlon,
+                                mmsi, mmsi
                         )
+            
         else:
                 query = (
                         "SELECT pos.*, v.shipname, v.callsign, v.shiptype, v.destination " 
                         "FROM ais_vessel_pos pos "
                         "LEFT JOIN ais_vessel v ON pos.mmsi = v.mmsi "
                         "WHERE pos.received_at >= %s "
+                        "  AND pos.lat IS NOT NULL AND pos.lon IS NOT NULL "
                         "  AND (%s IS NULL OR pos.mmsi = %s);"
                 )
-                df = pd.read_sql_query(query, conn, params=(datetime.now(timezone.utc) - timedelta(minutes=30), mmsi, mmsi))
-       
+                params = (datetime.now(timezone.utc) - timedelta(minutes=30), mmsi, mmsi)
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        headers = [desc[0] for desc in cur.description]
+        cur.close()
+           
         conn.close()
-        return df, bs 
+        return rows, bs, headers 
 
 
 def get_shipspotting_image(mmsi):      
@@ -200,8 +199,8 @@ def winlayout():
 
                 c1, c2 = st.columns(2)
                 time_dict = {
-                        "ini": to_utc(c1.datetime_input("From")),
-                        "fin": to_utc(c2.datetime_input("To"))
+                        "ini": c1.datetime_input("From"),
+                        "fin": c2.datetime_input("To")
                 }
                 st.subheader("Geographic and Time Filters")
                 segfilter = st.segmented_control("Filter", ["Live", "Aguça Doura"], selection_mode="multi")
@@ -209,26 +208,32 @@ def winlayout():
                 mmsi = st.text_input("MMSI")                                
 
                 c1, c2 = st.columns(2)
-                if c1.button("Load Data", use_container_width=True):
+                if c1.button("Load Data", width="stretch"):
                         with st.spinner(text="Please wait..."):
-                                df, bs = fetchDB(
-                                        time_dict, 
+                                rows, bs, headers = fetchDB(
+                                        {"ini": to_utc(time_dict["ini"]), "fin": to_utc(time_dict["fin"])}, 
                                         region=region_dict if "Aguça Doura" in segfilter else None, 
                                         live=True if "Live" in segfilter else False,
                                         mmsi=mmsi if validate_mmsi(str(mmsi)).valid else None
                                 )
-                                mapit(df, bs, live=True if "Live" in segfilter else False).save(mapfile)
-                                st.session_state.data2save = df.to_csv(index=False)
+                                st.session_state.mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"
+                                mapit(rows, bs, live=True if "Live" in segfilter else False).save(st.session_state.mapfile)
+
+                                # df.to_csv()
+                                output = io.StringIO()
+                                writer = csv.writer(output); writer.writerow(headers); writer.writerows(rows)     
+                                st.session_state.data2save = output.getvalue()
+
                                 st.session_state.loaded = True
 
                         
                 if "data2save" not in st.session_state:
-                        c2.button("CSV", use_container_width=True, icon=":material/download:")
+                        c2.button("CSV", width="stretch", icon=":material/download:")
                 else:
                         c2.download_button(
                                 "CSV", st.session_state.data2save, 
-                                file_name=f"ais_{datetime.now().date()}.csv", 
-                                mime="text/csv", use_container_width=True, 
+                                file_name = f"ais_{time_dict['ini']:%Y-%m-%d_%H-%M}-{time_dict['fin']:%Y-%m-%d_%H-%M}.csv",
+                                mime="text/csv", width="stretch", 
                                 type="primary", icon=":material/download:",
                         )
 
@@ -239,17 +244,11 @@ def winlayout():
                         if result.valid:
                                 url = get_shipspotting_image(mmsi)
                                 if url is not None:
-                                        st.image(url, caption=f"Vessel Photo (MMSI: {mmsi})", use_container_width=True)
+                                        st.image(url, caption=f"Vessel Photo (MMSI: {mmsi})", width="stretch")
 def loop():
         winlayout()
         if "loaded" not in st.session_state:
-                if os.path.exists(mapfile):
-                        st.session_state.loaded = True
-                else:
-                        st.session_state.loaded = False
+                st.session_state.loaded = False
         if st.session_state.loaded:
-                st.iframe(mapfile, height=1400)
-        if os.path.exists(mapfile):
-                os.remove(mapfile)
-
+                st.iframe(st.session_state.mapfile, height=1400)
 loop()    
