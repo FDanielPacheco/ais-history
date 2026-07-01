@@ -1,4 +1,4 @@
-import os, math, psycopg2, folium, requests, re, uuid, csv, io
+import os, math, psycopg2, folium, requests, re, uuid, csv, io, platform
 import streamlit as st
 import pandas as pd
 
@@ -204,7 +204,10 @@ def winlayout():
                                         mmsi=mmsi if validate_mmsi(str(mmsi)).valid else None
                                 )
                                 st.session_state.df = df.copy()
-                                st.session_state.mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"
+                                if platform.system() == "Windows":
+                                        st.session_state.mapfile = f"{uuid.uuid4().hex}.map.html"
+                                else:
+                                        st.session_state.mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"
                                 mapit(df, bs, live=True if "Live" in segfilter else False).save(st.session_state.mapfile)
 
                                 st.session_state.data2save = df.to_csv(index=False)
