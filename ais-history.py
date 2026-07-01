@@ -18,6 +18,13 @@ def to_utc(dt):
         local_tz = ZoneInfo("Europe/Lisbon")
         return dt.replace(tzinfo=local_tz).astimezone(timezone.utc)
 
+def get_shipspotting_image(mmsi):      
+        s = requests.Session()
+        s.headers.update({"User-Agent": "Mozilla/5.0"})
+        res = s.get(f"https://www.vesselfinder.com/vessels/details/{mmsi}")
+        img = re.search(r'<img[^>]*class="main-photo"[^>]*src="([^"]+)"|<img[^>]*src="([^"]+)"[^>]*class="main-photo"', res.text)
+        return (img.group(1) or img.group(2)) if img else None
+
 def mapit(df, bs, live=False):
         m = folium.Map(location=[bs["lat"], bs["lon"]], zoom_start=6, tiles="CartoDB positron")
         folium.Marker(
@@ -172,13 +179,6 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
         df = pd.read_sql_query(query, conn, params=params)           
         conn.close()
         return df, bs 
-
-def get_shipspotting_image(mmsi):      
-        s = requests.Session()
-        s.headers.update({"User-Agent": "Mozilla/5.0"})
-        res = s.get(f"https://www.vesselfinder.com/vessels/details/{mmsi}")
-        img = re.search(r'<img[^>]*class="main-photo"[^>]*src="([^"]+)"|<img[^>]*src="([^"]+)"[^>]*class="main-photo"', res.text)
-        return (img.group(1) or img.group(2)) if img else None
     
 def winlayout():
         st.set_page_config(page_title="AIS-History", layout="wide")
