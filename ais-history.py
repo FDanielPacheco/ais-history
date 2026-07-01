@@ -1,6 +1,6 @@
 import os, math, psycopg2, folium, requests, re, uuid, csv, io
 import streamlit as st
-import psycopg2.extras
+import pandas as pd
 
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta, time as dt_time
@@ -25,12 +25,12 @@ def mapit(df, bs, live=False):
                 popup="Base Station FEUP",
                 icon=folium.Icon(color="gray", icon="info-sign")
         ).add_to(m)
-        if not df:  
+        if df.empty:
                 return m
     
         color_map = {}
         features = []
-        for rec in df:
+        for idx, rec in df.iterrows():
                 mmsi, lat, lon, ts = rec["mmsi"], rec["lat"], rec["lon"], rec["received_at"]
                 if mmsi not in color_map:
                         color_map[mmsi] = colorscheme[len(color_map) % len(colorscheme)]
@@ -129,7 +129,6 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
         )
         bs = requests.get(f'http://{os.getenv("DB_HOST")}:8888').json()
 
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         if False == live:
                 validateTime(time_dict)
                 if region is None:
@@ -170,13 +169,9 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
                 )
                 params = (datetime.now(timezone.utc) - timedelta(minutes=30), mmsi, mmsi)
 
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        headers = [desc[0] for desc in cur.description]
-        cur.close()
-           
+        df = pd.read_sql_query(query, conn, params=params)           
         conn.close()
-        return rows, bs, headers 
+        return df, bs 
 
 
 def get_shipspotting_image(mmsi):      
@@ -210,20 +205,16 @@ def winlayout():
                 c1, c2 = st.columns(2)
                 if c1.button("Load Data", width="stretch"):
                         with st.spinner(text="Please wait..."):
-                                rows, bs, headers = fetchDB(
+                                df, bs = fetchDB(
                                         {"ini": to_utc(time_dict["ini"]), "fin": to_utc(time_dict["fin"])}, 
                                         region=region_dict if "Aguça Doura" in segfilter else None, 
                                         live=True if "Live" in segfilter else False,
                                         mmsi=mmsi if validate_mmsi(str(mmsi)).valid else None
                                 )
                                 st.session_state.mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"
-                                mapit(rows, bs, live=True if "Live" in segfilter else False).save(st.session_state.mapfile)
+                                mapit(df, bs, live=True if "Live" in segfilter else False).save(st.session_state.mapfile)
 
-                                # df.to_csv()
-                                output = io.StringIO()
-                                writer = csv.writer(output); writer.writerow(headers); writer.writerows(rows)     
-                                st.session_state.data2save = output.getvalue()
-
+                                st.session_state.data2save = df.to_csv(index=False)
                                 st.session_state.loaded = True
 
                         
