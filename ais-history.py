@@ -173,7 +173,6 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
         conn.close()
         return df, bs 
 
-
 def get_shipspotting_image(mmsi):      
         s = requests.Session()
         s.headers.update({"User-Agent": "Mozilla/5.0"})
@@ -195,7 +194,6 @@ def winlayout():
                 segfilter = st.segmented_control("Filter", ["Live", "Aguça Doura"], selection_mode="multi")
 
                 mmsi = st.text_input("MMSI")                                
-
                 c1, c2 = st.columns(2)
                 if c1.button("Load Data", width="stretch"):
                         with st.spinner(text="Please wait..."):
@@ -205,6 +203,7 @@ def winlayout():
                                         live=True if "Live" in segfilter else False,
                                         mmsi=mmsi if validate_mmsi(str(mmsi)).valid else None
                                 )
+                                st.session_state.df = df.copy()
                                 st.session_state.mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"
                                 mapit(df, bs, live=True if "Live" in segfilter else False).save(st.session_state.mapfile)
 
@@ -228,8 +227,17 @@ def winlayout():
                         result = validate_mmsi(str(mmsi))
                         if result.valid:
                                 url = get_shipspotting_image(mmsi)
-                                if url is not None:
+                                if url is not None and "df" in st.session_state and not st.session_state.df.empty:
+                                        matches = st.session_state.df[st.session_state.df["mmsi"].astype(str) == str(mmsi)]
+                                        shipname = matches["shipname"].iloc[0]
+
                                         st.image(url, caption=f"Vessel Photo (MMSI: {mmsi})", width="stretch")
+                                        st.caption(f"Country: {result.info.get("country", "Unknown")}")
+                                        destination = matches["destination"].iloc[0]
+                                        st.caption(f"Ship Name: {shipname}")
+                                        st.caption(f"Destination: {destination}")
+                                else:
+                                        st.text("No picture found")
 def loop():
         winlayout()
         if "loaded" not in st.session_state:
