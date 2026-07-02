@@ -204,7 +204,7 @@ def winlayout():
                                         mmsi=mmsi if validate_mmsi(str(mmsi)).valid else None
                                 )
                                 st.session_state.df = df.copy()
-                                if platform.system() == "Windows":
+                                if platform.system() == "Windows" or platform.system() == "Linux":
                                         st.session_state.mapfile = f"{uuid.uuid4().hex}.map.html"
                                 else:
                                         st.session_state.mapfile = f"/tmp/ais-history/{uuid.uuid4().hex}.map.html"
