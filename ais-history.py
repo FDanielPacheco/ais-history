@@ -196,15 +196,65 @@ def winlayout():
 
         st.markdown(
                 """
-                        <style>
-                        [data-testid=stSidebar] {
+                <style>
+                        [data-testid="stSidebar"] {
                                 background-color: #0091BE;
                         }
-                        </style>
-                """, 
+
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-segmented_controlActive"] {
+                                background-color: #ffffff !important;
+                                color: #0091BE !important;
+                                border-color: #ffffff !important;
+                        }
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-segmented_controlActive"] * {
+                                
+                        }
+
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-segmented_control"] {
+                                
+                        }
+
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"],
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:hover,
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:focus,
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:active {
+                                background-color: #ffffff !important;
+                                color: #0091BE !important;
+                                border-color: #ffffff !important;
+                        }
+                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] * {
+                                
+                        }
+
+                        [data-testid="stSidebarUserContent"] > div > div.stVerticalBlock {
+                                display: flex !important;
+                                flex-direction: column !important;
+                                min-height: calc(100vh - 40px) !important;
+                        }
+
+                        [data-testid="stSidebarUserContent"]
+                        div[data-testid="stElementContainer"]:has([data-testid="stImage"]):has(+ div .support-footer) {
+                                margin-top: auto !important;
+                                position: relative !important;
+                                padding: 50px 0 0px 0 !important;
+                        }
+
+                        [data-testid="stSidebarUserContent"]
+                        div[data-testid="stElementContainer"]:has(.support-footer) {
+                                position: relative !important;
+                                text-align: center !important;
+                                margin-top: -12px !important;
+                                padding: 0px 0 20px 0 !important;
+                        }
+                        .support-footer a,
+                        .support-footer a:hover {
+                                color: #ffffff !important;
+                                text-decoration: underline !important;
+                        }
+                </style>
+                """,
                 unsafe_allow_html=True
         )
-
 
         with st.sidebar:
                 st.title("AIS-History")
@@ -267,6 +317,14 @@ def winlayout():
                                         st.text("No picture found")
 
                 st.image("assets/INESCTECLogotipo_CORPositivo_RGB.jpg", width='stretch')
+                st.markdown(
+                        """
+                        <div class="support-footer">
+                                <a href="mailto:fabio.d.pacheco@inesctec.pt">fabio.d.pacheco@inesctec.pt</a>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                )
 
 def loop():
         winlayout()
