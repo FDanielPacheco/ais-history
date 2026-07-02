@@ -11,6 +11,7 @@ from vessel_validator import validate_mmsi
 
 colorscheme = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3","#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"]
 region_dict = {"lat": 41.458747, "lon": -8.842215, "width": 5.59704, "height": 5.59704}
+start_dict = {"lat": 41.444261, "lon": -8.778055}
 dlat = region_dict["width"] / 111.0
 dlon = region_dict["height"] / (111.0 * math.cos(math.radians(region_dict["lat"])))
 
@@ -112,6 +113,16 @@ def mapit(df, bs, live=False):
                 ],
                 color="#e41a1c", fill=True, fill_opacity=0.1, weight=2
         ).add_to(m)
+
+        # DAS cable
+        folium.PolyLine(
+                locations=[
+                        [start_dict["lat"], start_dict["lon"]], 
+                        [region_dict["lat"], region_dict["lon"]]
+                ],
+                color="#377eb8", weight=2.5, dash_array="5, 5"
+        ).add_to(m)
+
         return m
 
 def validateTime(time_dict):
