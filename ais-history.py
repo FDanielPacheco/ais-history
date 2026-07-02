@@ -193,6 +193,19 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
     
 def winlayout():
         st.set_page_config(page_title="AIS-History", layout="wide")
+
+        st.markdown(
+                """
+                        <style>
+                        [data-testid=stSidebar] {
+                                background-color: #0091BE;
+                        }
+                        </style>
+                """, 
+                unsafe_allow_html=True
+        )
+
+
         with st.sidebar:
                 st.title("AIS-History")
 
@@ -252,6 +265,9 @@ def winlayout():
                                         st.caption(f"Destination: {destination}")
                                 else:
                                         st.text("No picture found")
+
+                st.image("assets/INESCTECLogotipo_CORPositivo_RGB.jpg", width='stretch')
+
 def loop():
         winlayout()
         if "loaded" not in st.session_state:
