@@ -27,7 +27,7 @@ def get_shipspotting_image(mmsi):
         return (img.group(1) or img.group(2)) if img else None
 
 def mapit(df, bs, live=False):
-        m = folium.Map(location=[bs["lat"], bs["lon"]], zoom_start=6, tiles="CartoDB positron")
+        m = folium.Map(location=[bs["lat"], bs["lon"]], zoom_start=6, tiles="CartoDB positron", control_scale=True)
         folium.Marker(
                 [bs["lat"], bs["lon"]],
                 popup="Base Station FEUP",
