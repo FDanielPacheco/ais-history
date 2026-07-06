@@ -29,6 +29,22 @@ def get_shipspotting_image(mmsi):
 def mapit(df, bs, live=False):
         m = folium.Map(location=[bs["lat"], bs["lon"]], zoom_start=6, tiles="CartoDB positron", control_scale=True)
 
+        # Sattelite Map
+        satellite_layer = folium.TileLayer(
+                tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attr='Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
+                name='Satellite Imagery',
+                overlay=False,
+                show=True
+        ).add_to(m)
+        labels_overlay = folium.TileLayer(
+                tiles='https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+                attr='Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community',
+                name='City Labels & Boundaries',
+                overlay=True,
+                show=True
+        ).add_to(m)
+
         # Measurement Feature
         m.add_child(MeasureControl(
                 position='topleft',
@@ -134,6 +150,9 @@ def mapit(df, bs, live=False):
                 ],
                 color="#377eb8", weight=2.5, dash_array="5, 5"
         ).add_to(m)
+
+        #option to shose between satellite and labels overlay
+        #folium.LayerControl(position='topright').add_to(m)
 
         return m
 
