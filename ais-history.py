@@ -5,7 +5,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
-from folium.plugins import TimestampedGeoJson
+from folium.plugins import TimestampedGeoJson, MeasureControl
 from pathlib import Path
 from vessel_validator import validate_mmsi
 
@@ -28,6 +28,18 @@ def get_shipspotting_image(mmsi):
 
 def mapit(df, bs, live=False):
         m = folium.Map(location=[bs["lat"], bs["lon"]], zoom_start=6, tiles="CartoDB positron", control_scale=True)
+
+        # Measurement Feature
+        m.add_child(MeasureControl(
+                position='topleft',
+                primary_length_unit='nauticalmiles',
+                secondary_length_unit='kilometers',
+                primary_area_unit='sqnm',
+                secondary_area_unit='sqkilometers',
+                active_color='#e41a1c',
+                completed_color='#377eb8'
+        ))
+
         folium.Marker(
                 [bs["lat"], bs["lon"]],
                 popup="Base Station FEUP",
