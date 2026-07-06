@@ -1,0 +1,10 @@
+[theme]
+backgroundColor="#ffffff"
+secondaryBackgroundColor="#64c8eb"
+primaryColor="#ffffff"
+
+[theme.sidebar]
+backgroundColor="#f8f8ff"
+secondaryBackgroundColor="#64c8eb"
+primaryColor="#0091be"
+

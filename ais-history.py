@@ -194,68 +194,6 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
 def winlayout():
         st.set_page_config(page_title="AIS-History", layout="wide")
 
-        st.markdown(
-                """
-                <style>
-                        [data-testid="stSidebar"] {
-                                background-color: #0091BE;
-                        }
-
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-segmented_controlActive"] {
-                                background-color: #ffffff !important;
-                                color: #0091BE !important;
-                                border-color: #ffffff !important;
-                        }
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-segmented_controlActive"] * {
-                                
-                        }
-
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-segmented_control"] {
-                                
-                        }
-
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"],
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:hover,
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:focus,
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:active {
-                                background-color: #ffffff !important;
-                                color: #0091BE !important;
-                                border-color: #ffffff !important;
-                        }
-                        [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] * {
-                                
-                        }
-
-                        [data-testid="stSidebarUserContent"] > div > div.stVerticalBlock {
-                                display: flex !important;
-                                flex-direction: column !important;
-                                min-height: calc(100vh - 40px) !important;
-                        }
-
-                        [data-testid="stSidebarUserContent"]
-                        div[data-testid="stElementContainer"]:has([data-testid="stImage"]):has(+ div .support-footer) {
-                                margin-top: auto !important;
-                                position: relative !important;
-                                padding: 50px 0 0px 0 !important;
-                        }
-
-                        [data-testid="stSidebarUserContent"]
-                        div[data-testid="stElementContainer"]:has(.support-footer) {
-                                position: relative !important;
-                                text-align: center !important;
-                                margin-top: -12px !important;
-                                padding: 0px 0 20px 0 !important;
-                        }
-                        .support-footer a,
-                        .support-footer a:hover {
-                                color: #ffffff !important;
-                                text-decoration: underline !important;
-                        }
-                </style>
-                """,
-                unsafe_allow_html=True
-        )
-
         with st.sidebar:
                 st.title("AIS-History")
 
@@ -316,17 +254,11 @@ def winlayout():
                                 else:
                                         st.text("No picture found")
 
-                st.image("assets/INESCTECLogotipo_CORPositivo_RGB.jpg", width='stretch')
-                st.markdown(
-                        """
-                        <div class="support-footer">
-                                <a href="mailto:fabio.d.pacheco@inesctec.pt">fabio.d.pacheco@inesctec.pt</a>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                )
+with st.bottom:
+        st.caption("© 2026 INESC TEC - MIT License | fabio.d.pacheco@inesctec.pt")
 
 def loop():
+        st.logo("https://www.inesctec.pt/INESCTECcomb_EN_mail.png")
         winlayout()
         if "loaded" not in st.session_state:
                 st.session_state.loaded = False
