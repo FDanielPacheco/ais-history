@@ -1,4 +1,4 @@
-import os, math, psycopg2, folium, requests, re, uuid, csv, io, platform
+import os, math, psycopg2, folium, requests, re, uuid, csv, io, platform, time
 import streamlit as st
 import pandas as pd
 
@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from folium.plugins import TimestampedGeoJson, MeasureControl
 from pathlib import Path
 from vessel_validator import validate_mmsi
+from streamlit_autorefresh import st_autorefresh
 
 colorscheme = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3","#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"]
 region_dict = {"lat": 41.458747, "lon": -8.842215, "width": 5.59704, "height": 5.59704}
@@ -151,8 +152,7 @@ def mapit(df, bs, live=False):
                 color="#377eb8", weight=2.5, dash_array="5, 5"
         ).add_to(m)
 
-        #option to shose between satellite and labels overlay
-        #folium.LayerControl(position='topright').add_to(m)
+        folium.LayerControl(position='topright').add_to(m)
 
         return m
 
@@ -236,9 +236,19 @@ def winlayout():
                 st.subheader("Geographic and Time Filters")
                 segfilter = st.segmented_control("Filter", ["Live", "Aguça Doura"], selection_mode="multi")
 
+                st.session_state.is_live = True if "Live" in segfilter else False
+                auto_refresh_triggered = st.session_state.get("auto_refresh_triggered", False)
+
+                if st.session_state.is_live:
+                        options = {"1m": 60, "5m": 300, "10m": 600, "30m": 1800, "1h": 3600}
+                        selected_option = st.selectbox("Auto-Refresh Interval", options=list(options.keys()), index=2)
+                        st.session_state.refresh_interval_ms = options[selected_option] * 1000
+                
                 mmsi = st.text_input("MMSI")                                
                 c1, c2 = st.columns(2)
-                if c1.button("Load Data", width="stretch"):
+                if c1.button("Load Data", width="stretch") or auto_refresh_triggered:
+                        st.session_state.auto_refresh_triggered = False
+
                         with st.spinner(text="Please wait..."):
                                 df, bs = fetchDB(
                                         {"ini": to_utc(time_dict["ini"]), "fin": to_utc(time_dict["fin"])}, 
@@ -256,7 +266,6 @@ def winlayout():
                                 st.session_state.data2save = df.to_csv(index=False)
                                 st.session_state.loaded = True
 
-                        
                 if "data2save" not in st.session_state:
                         c2.button("CSV", width="stretch", icon=":material/download:")
                 else:
@@ -291,8 +300,16 @@ with st.bottom:
 def loop():
         st.logo("https://www.inesctec.pt/INESCTECcomb_EN_mail.png")
         winlayout()
+
+        if st.session_state.get("loaded", False) and st.session_state.get("is_live", False):
+                interval_ms = st.session_state.get("refresh_interval_ms", 60000)
+                refresh = st_autorefresh(interval=interval_ms, key=f"ais_refresh{interval_ms}")
+                if refresh >= 0:
+                        st.session_state.auto_refresh_triggered = True
+
         if "loaded" not in st.session_state:
                 st.session_state.loaded = False
         if st.session_state.loaded:
                 st.iframe(st.session_state.mapfile, height=1400)
+
 loop()    
