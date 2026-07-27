@@ -1,4 +1,4 @@
-import os, math, psycopg2, folium, requests, re, uuid, csv, io, platform, time
+import os, math, psycopg2, folium, requests, re, uuid, csv, io, platform, time, sqlite3
 import streamlit as st
 import pandas as pd
 
@@ -221,7 +221,32 @@ def fetchDB(time_dict, region=None, live=False, mmsi=None):
         df = pd.read_sql_query(query, conn, params=params)           
         conn.close()
         return df, bs 
-    
+
+def get_alerts():
+        time_threshold_str = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        query = "SELECT mmsi, datetime FROM vessel_alerts WHERE datetime >= ?;"
+
+        try:
+                with sqlite3.connect("ais_notifications.db", timeout=5) as conn:
+                    return pd.read_sql_query(query, conn, params=[time_threshold_str]).to_dict(orient="records")    
+        except Exception as e:
+                return []
+        
+def check_notifications():
+        if "shown_alerts" not in st.session_state:
+                st.session_state.shown_alerts = set()
+        
+        alerts = get_alerts()
+
+        for alert in alerts:
+                mmsi = alert["mmsi"]
+                alert_time = alert["datetime"]
+                alert_key = f"{mmsi}_{alert_time}"
+
+                if alert_key not in st.session_state.shown_alerts:
+                        st.session_state.shown_alerts.add(alert_key)
+                        st.toast(f"🚢 **Vessel Entered Region!**\n\nMMSI: `{mmsi}`\nTime: {alert_time}", icon="🚨")
+
 def winlayout():
         st.set_page_config(page_title="AIS-History", layout="wide")
 
@@ -301,11 +326,20 @@ def loop():
         st.logo("https://www.inesctec.pt/INESCTECcomb_EN_mail.png")
         winlayout()
 
-        if st.session_state.get("loaded", False) and st.session_state.get("is_live", False):
-                interval_ms = st.session_state.get("refresh_interval_ms", 60000)
-                refresh = st_autorefresh(interval=interval_ms, key=f"ais_refresh{interval_ms}")
-                if refresh >= 0:
-                        st.session_state.auto_refresh_triggered = True
+        if st.session_state.get("is_live", False):
+                check_notifications()
+                st_autorefresh(interval=60000, key="notification_1m_heartbeat")
+
+                if st.session_state.get("loaded", False):
+                        map_interval_ms = st.session_state.get("refresh_interval_ms", 60000)
+                        
+                        map_refresh_count = st_autorefresh(
+                                interval=map_interval_ms, 
+                                key=f"map_refresh_{map_interval_ms}"
+                        )
+                        
+                        if map_refresh_count > 0:
+                                st.session_state.auto_refresh_triggered = True
 
         if "loaded" not in st.session_state:
                 st.session_state.loaded = False
